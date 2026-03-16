@@ -70,6 +70,9 @@ const DAYS = [
   "Sunday",
 ];
 
+// Fixed speed points for the slider
+const SPEED_STEPS = [0.5, 1, 2, 5, 10, 20];
+
 const expRamp = (t: number, t0: number, t1: number, v0: number, v1: number) => {
   if (t <= t0) return v0;
   if (t >= t1) return v1;
@@ -83,50 +86,25 @@ const getFactoryDemandMW = (tDayMinutes: number) => {
   const workStart = 8 * 60;
   const workEnd = 16 * 60;
   const ramp = 60;
-  const beforeWork = workStart - ramp;
-  const afterWork = workEnd + ramp;
-  if (tDayMinutes < beforeWork) {
-    return 0.5;
-  } else if (tDayMinutes < workStart) {
-    return expRamp(tDayMinutes, beforeWork, workStart, 0.5, 45);
-  } else if (tDayMinutes < workEnd) {
-    return 45;
-  } else if (tDayMinutes < afterWork) {
-    return expRamp(tDayMinutes, workEnd, afterWork, 45, 0.5);
-  } else {
-    return 0.5;
-  }
+  if (tDayMinutes < workStart - ramp) return 0.5;
+  if (tDayMinutes < workStart)
+    return expRamp(tDayMinutes, workStart - ramp, workStart, 0.5, 45);
+  if (tDayMinutes < workEnd) return 45;
+  if (tDayMinutes < workEnd + ramp)
+    return expRamp(tDayMinutes, workEnd, workEnd + ramp, 45, 0.5);
+  return 0.5;
 };
 
 const getCityDemandMW = (tDayMinutes: number) => {
   const t = tDayMinutes;
-  const s0 = 0;
-  const s1 = 5 * 60;
-  const s2 = 9 * 60;
-  const s3 = 15 * 60;
-  const s4 = 19 * 60;
-  const s5 = 23 * 60;
-  const v0 = 0.2;
-  const v1 = 12;
-  const v2 = 11.5;
-  const v3 = 2;
-  const v4 = 16;
-  const v5 = 0.3;
-  const v6 = 0.2;
-
-  if (t < s1) {
-    return expRamp(t, s0, s1, v0, v1);
-  } else if (t < s2) {
-    return expRamp(t, s1, s2, v1, v2);
-  } else if (t < s3) {
-    return expRamp(t, s2, s3, v2, v3);
-  } else if (t < s4) {
-    return expRamp(t, s3, s4, v3, v4);
-  } else if (t < s5) {
-    return expRamp(t, s4, s5, v4, v5);
-  } else {
-    return expRamp(t, s5, 24 * 60, v5, v6);
-  }
+  const s = [0, 300, 540, 900, 1140, 1380]; // Steps in minutes
+  const v = [0.2, 12, 11.5, 2, 16, 0.3, 0.2]; // Voltages/MW
+  if (t < s[1]) return expRamp(t, s[0], s[1], v[0], v[1]);
+  if (t < s[2]) return expRamp(t, s[1], s[2], v[1], v[2]);
+  if (t < s[3]) return expRamp(t, s[2], s[3], v[2], v[3]);
+  if (t < s[4]) return expRamp(t, s[3], s[4], v[3], v[4]);
+  if (t < s[5]) return expRamp(t, s[4], s[5], v[4], v[5]);
+  return expRamp(t, s[5], 1440, v[5], v[6]);
 };
 
 const SmartGrid = () => {
@@ -141,12 +119,14 @@ const SmartGrid = () => {
 
   const [totalMinutes, setTotalMinutes] = useState(8 * 60);
   const [isPaused, setIsPaused] = useState(false);
-  const [timeSpeed, setTimeSpeed] = useState(1);
+  const [speedIndex, setSpeedIndex] = useState(1); // Default to 1x (SPEED_STEPS[1])
   const [lines, setLines] = useState<any[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [power, setPower] = useState({ hydro: 50, solar: 0, wind: 3.75 });
   const [demand, setDemand] = useState({ factory: 0, city: 0 });
+
+  const timeSpeed = SPEED_STEPS[speedIndex];
 
   useEffect(() => {
     if (isPaused) return;
@@ -161,15 +141,10 @@ const SmartGrid = () => {
         const t = next / 100;
 
         const hydroBase = 50 + Math.sin(t * 0.1) * 0.2;
-
-        const sunrise = 360;
-        const sunset = 1080;
         let solarBase = 0;
-        if (dayMinutes > sunrise && dayMinutes < sunset) {
-          const sunPos = (dayMinutes - sunrise) / (sunset - sunrise);
-          solarBase = 15 * Math.sin(Math.PI * sunPos);
+        if (dayMinutes > 360 && dayMinutes < 1080) {
+          solarBase = 15 * Math.sin(Math.PI * ((dayMinutes - 360) / 720));
         }
-
         const windBase =
           3.75 + Math.sin(t * 0.5) * 3 + Math.cos(t * 0.2) * 0.75;
 
@@ -179,12 +154,9 @@ const SmartGrid = () => {
           wind: activeNodes.wind ? Math.max(0, Math.min(7.5, windBase)) : 0,
         });
 
-        const factoryMW = getFactoryDemandMW(dayMinutes);
-        const cityMW = getCityDemandMW(dayMinutes);
-
         setDemand({
-          factory: activeNodes.factory1 ? factoryMW : 0,
-          city: activeNodes.city1 ? cityMW : 0,
+          factory: activeNodes.factory1 ? getFactoryDemandMW(dayMinutes) : 0,
+          city: activeNodes.city1 ? getCityDemandMW(dayMinutes) : 0,
         });
 
         return next;
@@ -201,13 +173,7 @@ const SmartGrid = () => {
 
   const totalProduction = power.hydro + power.solar + power.wind;
   const totalDemand = demand.factory + demand.city;
-
   const loadRatio = totalProduction > 0 ? totalDemand / totalProduction : 0;
-  const loadPercent = Math.round(loadRatio * 100);
-
-  const activeSources = ["wind", "hydrogen", "solar"].filter(
-    (id) => activeNodes[id],
-  ).length;
 
   const calculateLines = useCallback(() => {
     if (!containerRef.current) return;
@@ -216,23 +182,15 @@ const SmartGrid = () => {
     const newLines = CONNECTIONS.map((conn) => {
       const start = document.getElementById(conn.from);
       const end = document.getElementById(conn.to);
-
       if (start && end) {
         const sRect = start.getBoundingClientRect();
         const eRect = end.getBoundingClientRect();
-
         const x1 = sRect.left + sRect.width / 2 - rect.left;
         const y1 = sRect.top + sRect.height / 2 - rect.top;
         const x2 = eRect.left + eRect.width / 2 - rect.left;
         const y2 = eRect.top + eRect.height / 2 - rect.top;
 
-        const cp1x = x1 + (x2 - x1) / 2;
-        const cp1y = y1;
-        const cp2x = x1 + (x2 - x1) / 2;
-        const cp2y = y2;
-
         let statusClass = "";
-
         if (conn.from === "tower") {
           if (loadRatio > 0.9) statusClass = "power-low";
           else if (loadRatio > 0.8) statusClass = "power-medium";
@@ -241,62 +199,66 @@ const SmartGrid = () => {
 
         return {
           id: `${conn.from}-${conn.to}`,
-          path: `M ${x1} ${y1} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${x2} ${y2}`,
+          path: `M ${x1} ${y1} C ${x1 + (x2 - x1) / 2} ${y1} ${x1 + (x2 - x1) / 2} ${y2} ${x2} ${y2}`,
           active:
-            activeNodes[conn.from] && activeNodes[conn.to] && activeSources > 0,
+            activeNodes[conn.from] &&
+            activeNodes[conn.to] &&
+            ["wind", "hydrogen", "solar"].filter((id) => activeNodes[id])
+              .length > 0,
           statusClass,
         };
       }
       return null;
-    }).filter(Boolean) as any[];
-
+    }).filter(Boolean);
     setLines(newLines);
-  }, [activeNodes, activeSources, loadRatio]);
+  }, [activeNodes, loadRatio]);
+
   useEffect(() => {
     calculateLines();
-
     window.addEventListener("resize", calculateLines);
-
-    return () => {
-      window.removeEventListener("resize", calculateLines);
-    };
+    return () => window.removeEventListener("resize", calculateLines);
   }, [calculateLines, power, demand]);
-
-  useEffect(() => {
-    setActiveNodes((prev) => ({ ...prev, tower: activeSources > 0 }));
-  }, [activeSources]);
 
   return (
     <div className="grid-container">
-      <div className="sim-header">
-        <div className="time-display">
-          <span className="day-text">{DAYS[dayIndex]}</span>
-          <span className="clock-text">
-            {String(hour).padStart(2, "0")}:{String(minute).padStart(2, "0")}
-          </span>
+      <div className="sim-dashboard">
+        {/* New Redesigned Time Module */}
+        <div className="time-module">
+          <div className="date-badge">{DAYS[dayIndex]}</div>
+          <div className="digital-clock">
+            {String(hour).padStart(2, "0")}
+            <span>:</span>
+            {String(minute).padStart(2, "0")}
+          </div>
         </div>
 
-        <div className="controls-row">
+        {/* Speed & Control Module */}
+        <div className="control-module">
           <button
-            className="speed-btn"
-            onClick={() => setTimeSpeed(Math.max(0.5, timeSpeed - 0.5))}
-          >
-            Slower
-          </button>
-          <button
-            className={`pause-btn ${isPaused ? "is-paused" : ""}`}
+            className={`pause-btn-round ${isPaused ? "is-paused" : ""}`}
             onClick={() => setIsPaused(!isPaused)}
           >
-            {isPaused ? "RESUME" : "PAUSE"}
+            {isPaused ? "▶" : "II"}
           </button>
-          <button
-            className="speed-btn"
-            onClick={() => setTimeSpeed(Math.min(20, timeSpeed + 0.5))}
-          >
-            Faster
-          </button>
+
+          <div className="slider-container">
+            <div className="speed-labels">
+              {SPEED_STEPS.map((s, i) => (
+                <span key={s} className={speedIndex === i ? "active" : ""}>
+                  {s}x
+                </span>
+              ))}
+            </div>
+            <input
+              type="range"
+              min="0"
+              max={SPEED_STEPS.length - 1}
+              value={speedIndex}
+              onChange={(e) => setSpeedIndex(parseInt(e.target.value))}
+              className="speed-slider"
+            />
+          </div>
         </div>
-        <div className="speed-indicator">Speed: {timeSpeed.toFixed(1)}x</div>
       </div>
 
       <div className="grid-board" ref={containerRef}>
@@ -315,34 +277,21 @@ const SmartGrid = () => {
           let towerStatus = "";
           let nodeValue = "";
 
-          if (node.id === "hydrogen") {
+          if (node.id === "hydrogen")
             nodeValue = `${power.hydro.toFixed(2)} MW`;
-          }
-
-          if (node.id === "solar") {
-            nodeValue = `${power.solar.toFixed(2)} MW`;
-          }
-
-          if (node.id === "wind") {
-            nodeValue = `${power.wind.toFixed(2)} MW`;
-          }
+          if (node.id === "solar") nodeValue = `${power.solar.toFixed(2)} MW`;
+          if (node.id === "wind") nodeValue = `${power.wind.toFixed(2)} MW`;
+          if (node.id === "factory1")
+            nodeValue = `${demand.factory.toFixed(2)} MW`;
+          if (node.id === "city1") nodeValue = `${demand.city.toFixed(2)} MW`;
 
           if (node.id === "tower") {
             nodeValue = `${totalProduction.toFixed(2)} MW`;
-
             if (activeNodes.tower) {
               if (loadRatio > 0.9) towerStatus = "status-low";
               else if (loadRatio > 0.8) towerStatus = "status-medium";
               else towerStatus = "status-high";
             }
-          }
-
-          if (node.id === "factory1") {
-            nodeValue = `${demand.factory.toFixed(2)} MW`;
-          }
-
-          if (node.id === "city1") {
-            nodeValue = `${demand.city.toFixed(2)} MW`;
           }
 
           return (
@@ -354,24 +303,20 @@ const SmartGrid = () => {
               <div
                 id={node.id}
                 className="icon-wrapper"
-                onClick={() => {
-                  if (node.id !== "tower") {
-                    setActiveNodes((prev) => ({
-                      ...prev,
-                      [node.id]: !prev[node.id],
-                    }));
-                  }
-                }}
+                onClick={() =>
+                  node.id !== "tower" &&
+                  setActiveNodes((p) => ({ ...p, [node.id]: !p[node.id] }))
+                }
               >
                 <img src={`/icons/png/${node.img}`} alt={node.label} />
               </div>
               <div className="node-info">
                 <span className="node-label">{node.label}</span>
-
                 {nodeValue && <span className="node-value">{nodeValue}</span>}
-
                 {node.id === "tower" && activeNodes.tower && (
-                  <span className="node-load">{loadPercent}% load</span>
+                  <span className="node-load">
+                    {Math.round(loadRatio * 100)}% load
+                  </span>
                 )}
               </div>
             </div>
