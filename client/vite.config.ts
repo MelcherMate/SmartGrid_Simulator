@@ -5,13 +5,11 @@ import { defineConfig, loadEnv } from "vite";
 const root = resolve(__dirname, "src");
 
 export default defineConfig(({ mode }) => {
-  // Explicitly load the env variables based on the current mode
   const env = loadEnv(mode, process.cwd());
-
-  console.log(`Loaded environment variables for mode: ${mode}`, env); // Debugging
 
   return {
     root,
+    publicDir: resolve(__dirname, "public"),
     plugins: [react()],
     resolve: {
       alias: {
