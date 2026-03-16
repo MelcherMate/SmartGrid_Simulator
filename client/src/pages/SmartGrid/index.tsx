@@ -200,10 +200,12 @@ const SmartGrid = () => {
   const minute = currentMinutesTotal % 60;
 
   const totalProduction = power.hydro + power.solar + power.wind;
+  const totalDemand = demand.factory + demand.city;
+
+  const loadRatio = totalProduction > 0 ? totalDemand / totalProduction : 0;
+  const loadPercent = Math.round(loadRatio * 100);
+
   const activeSources = ["wind", "hydrogen", "solar"].filter(
-    (id) => activeNodes[id],
-  ).length;
-  const activeFactories = ["factory1", "city1"].filter(
     (id) => activeNodes[id],
   ).length;
 
@@ -230,15 +232,11 @@ const SmartGrid = () => {
         const cp2y = y2;
 
         let statusClass = "";
+
         if (conn.from === "tower") {
-          if (activeFactories === 2) {
-            if (activeSources === 3) statusClass = "power-high";
-            else if (activeSources === 2) statusClass = "power-medium";
-            else if (activeSources === 1) statusClass = "power-low";
-          } else if (activeFactories === 1) {
-            if (activeSources >= 2) statusClass = "power-high";
-            else if (activeSources === 1) statusClass = "power-medium";
-          }
+          if (loadRatio > 0.9) statusClass = "power-low";
+          else if (loadRatio > 0.8) statusClass = "power-medium";
+          else statusClass = "power-high";
         }
 
         return {
@@ -253,16 +251,16 @@ const SmartGrid = () => {
     }).filter(Boolean) as any[];
 
     setLines(newLines);
-  }, [activeNodes, activeSources, activeFactories]);
-
+  }, [activeNodes, activeSources, loadRatio]);
   useEffect(() => {
-    const timeout = setTimeout(calculateLines, 100);
+    calculateLines();
+
     window.addEventListener("resize", calculateLines);
+
     return () => {
       window.removeEventListener("resize", calculateLines);
-      clearTimeout(timeout);
     };
-  }, [calculateLines]);
+  }, [calculateLines, power, demand]);
 
   useEffect(() => {
     setActiveNodes((prev) => ({ ...prev, tower: activeSources > 0 }));
@@ -317,28 +315,32 @@ const SmartGrid = () => {
           let towerStatus = "";
           let nodeValue = "";
 
-          if (node.id === "hydrogen")
+          if (node.id === "hydrogen") {
             nodeValue = `${power.hydro.toFixed(2)} MW`;
-          if (node.id === "solar") nodeValue = `${power.solar.toFixed(2)} MW`;
-          if (node.id === "wind") nodeValue = `${power.wind.toFixed(2)} MW`;
+          }
+
+          if (node.id === "solar") {
+            nodeValue = `${power.solar.toFixed(2)} MW`;
+          }
+
+          if (node.id === "wind") {
+            nodeValue = `${power.wind.toFixed(2)} MW`;
+          }
+
           if (node.id === "tower") {
             nodeValue = `${totalProduction.toFixed(2)} MW`;
+
             if (activeNodes.tower) {
-              if (activeFactories === 2) {
-                if (activeSources === 3) towerStatus = "status-high";
-                else if (activeSources === 2) towerStatus = "status-medium";
-                else if (activeSources === 1) towerStatus = "status-low";
-              } else if (activeFactories === 1) {
-                if (activeSources >= 2) towerStatus = "status-high";
-                else if (activeSources === 1) towerStatus = "status-medium";
-              } else {
-                towerStatus = "status-high";
-              }
+              if (loadRatio > 0.9) towerStatus = "status-low";
+              else if (loadRatio > 0.8) towerStatus = "status-medium";
+              else towerStatus = "status-high";
             }
           }
+
           if (node.id === "factory1") {
             nodeValue = `${demand.factory.toFixed(2)} MW`;
           }
+
           if (node.id === "city1") {
             nodeValue = `${demand.city.toFixed(2)} MW`;
           }
@@ -365,7 +367,12 @@ const SmartGrid = () => {
               </div>
               <div className="node-info">
                 <span className="node-label">{node.label}</span>
+
                 {nodeValue && <span className="node-value">{nodeValue}</span>}
+
+                {node.id === "tower" && activeNodes.tower && (
+                  <span className="node-load">{loadPercent}% load</span>
+                )}
               </div>
             </div>
           );

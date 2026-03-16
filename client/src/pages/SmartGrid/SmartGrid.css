@@ -224,7 +224,7 @@ html {
   background: #2d3748;
   border: 2px solid #4a5568;
   padding: 4px 0;
-  border-radius: 12px;
+  border-radius: 16px;
   text-align: center;
   font-weight: 600;
   pointer-events: none;
@@ -232,12 +232,19 @@ html {
 
 .node-value {
   font-family: "Courier New", Courier, monospace;
-  font-size: 12px;
+  font-size: 14px;
   color: #63b3ed;
   font-weight: bold;
   background: rgba(0, 0, 0, 0.3);
   padding: 2px 8px;
   border-radius: 8px;
+}
+
+.node-load {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  color: #cbd5f5;
 }
 
 .node-off {
