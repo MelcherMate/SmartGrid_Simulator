@@ -17,11 +17,11 @@ const app = express();
 app.use(
   cookieSession({
     name: "session",
-    keys: [process.env.SESSION_SECRET || "matemelcher"],
+    keys: [process.env.SESSION_SECRET || "smartgridsim"],
     maxAge: 24 * 60 * 60 * 1000,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-  })
+  }),
 );
 
 /* --------------------------------------------------
@@ -40,16 +40,20 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://www.matemelcher.com"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "https://www.smartgridsim.com",
+        ],
         connectSrc: [
           "'self'",
-          "https://mate-melcher.onrender.com",
-          "https://www.matemelcher.com",
+          "https://smartgridsim.onrender.com",
+          "https://www.smartgridsim.com",
         ],
         imgSrc: ["'self'", "data:", "https:"],
       },
     },
-  })
+  }),
 );
 
 /* --------------------------------------------------

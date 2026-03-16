@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
+        "@": resolve(__dirname, "src"),
         "@img": resolve(__dirname, "src/utils/img"),
         "@pdf": resolve(__dirname, "src/utils/pdf"),
       },

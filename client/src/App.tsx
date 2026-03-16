@@ -1,7 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
-import Home from "./pages/Home";
-import Testpage from "./pages/Test";
+import SmartGrid from "./pages/SmartGrid";
 
 function App() {
   return (
@@ -9,9 +8,9 @@ function App() {
       <BrowserRouter>
         <div className="appContainer">
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<SmartGrid />} />
             <Route path="*" element={<Navigate to="/" />} />
-            <Route path="/test" element={<Testpage />} />
+            <Route path="/smartgrid" element={<SmartGrid />} />
           </Routes>
         </div>
       </BrowserRouter>
